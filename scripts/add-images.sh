@@ -28,6 +28,9 @@ mkdir -p "$DIR"
 
 git fetch -q origin "$BRANCH" && git merge -q --ff-only "origin/$BRANCH" 2>/dev/null || true
 
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
 n=0
 urls=()
 for f in "$@"; do
@@ -37,6 +40,13 @@ for f in "$@"; do
     jpg|jpeg|png|gif|webp) ;;
     *) echo "未対応の形式のためスキップ: $f (jpg/png/gif/webpのみ)" >&2; continue ;;
   esac
+  # 大きすぎる画像は自動縮小（長辺1600px超 / 1MB超。YI_MAX_SIDE, YI_MAX_BYTES で変更可）
+  before=$(stat -c %s "$f")
+  opt="$(python3 -I "$ROOT/scripts/optimize_image.py" "$f" "$WORK/$((n + 1))")"
+  after=$(stat -c %s "$opt")
+  [ "$before" -ne "$after" ] && echo "縮小: $(basename "$f") $((before / 1024))KB -> $((after / 1024))KB" >&2
+  f="$opt"
+  ext="$(printf '%s' "${f##*.}" | tr 'A-Z' 'a-z')"
   n=$((n + 1))
   name="$(printf '%s-%02d.%s' "$STAMP" "$n" "$ext")"
   cp "$f" "$DIR/$name"
